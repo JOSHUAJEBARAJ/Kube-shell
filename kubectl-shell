@@ -1,0 +1,102 @@
+#!/bin/bash
+
+function help(){
+   cat << EOF
+usage: kubectl shell  [pod-name]/[container-name] [namespace][optional]
+eg kubectl shell hello-world 
+or 
+kubectl shell hello-world  default 
+EOF
+exit 1 
+}
+
+if [ $# -lt 1 ]
+then
+    help
+fi
+
+if [ $# -gt 2 ]
+then
+
+    help
+fi
+
+function podshell() {
+    
+    namespacename=$2
+    if [ -z "$2" ]
+then
+      
+      namespacename=default 
+fi 
+kubectl exec  -n $namespacename -ti  $1  -- sh
+exit 0 
+}
+
+
+
+function containershell(){
+     namespacename=$3
+    if [ -z "$3" ]
+then
+      
+      namespacename=default 
+fi 
+
+kubectl exec -n $namespacename -ti $1 -c $2 -- sh 
+exit 0 
+}
+
+function getcontainers() {
+
+    
+    
+CONTAINERS=$(kubectl get pods   -ojsonpath="{.items[?(@.metadata.name=='$1')].spec.containers..name}")
+
+IFS=' ' read -r -a array <<< $CONTAINERS
+
+for element in "${array[@]}"
+
+do
+ 
+if [[ "$element" == "$2" ]]
+then 
+
+    containershell $1 $element $3
+fi 
+done
+
+}
+
+if [ $# -eq 2 ]
+then
+  
+  OUT=`kubectl get pods -n $2  -ojsonpath="{.items..metadata.name}"`
+ 
+else
+ OUT=`kubectl get pods   -ojsonpath="{.items..metadata.name}"`
+fi
+
+
+
+
+
+IFS=' ' read -r -a array <<< $OUT
+
+for element in "${array[@]}"
+do
+if [[ "$element" == "$1" ]]
+then 
+ 
+    podshell $element $2
+fi 
+done
+
+
+
+for element in "${array[@]}"
+do
+
+    getcontainers $element $1 $2
+done
+ 
