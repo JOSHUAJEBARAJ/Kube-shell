@@ -3,7 +3,7 @@
 **Kubectl shell** is the [Kubernetes-plugin](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/) which helps to get shell inside the container/pods
 
 ## Installation
-- Download the [binary] from [here](kubectl-shell) 
+- Download the binary from [here](kubectl-shell) 
 - Move it to the PATH Location
 
 ```
