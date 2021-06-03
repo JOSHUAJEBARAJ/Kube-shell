@@ -1,96 +1,130 @@
 #!/usr/bin/env bash
 
-function checkkubectl () {
+set -e
+set -u 
+set -o pipefail
 
-if ! command -v kubectl &> /dev/null
-  then
-  echo "kubectl could not be found."
-  exit 1
-fi
+err(){
+  printf >&2 "%s\n" "${@}"
 }
 
-checkkubectl
+checkDeps(){
+  set +e
+  set +u
+  dependencies=( kubectl rev awk )
+  for cm in ${dependencies[@]}; do
+    command -v ${cm} &> /dev/null
+    if (( ${?} != 0 )); then
+      missingDep+="${cm} "
+    fi
+  done
+  if (( ${#missingDep} != 0 )); then
+    for cm in ${missingDep[@]}; do
+      err "You don't have ${cm} on Your machine."
+    done
+    exit 1
+  fi
+}
+checkDeps
+hlp() {
+  cat << 'EOF'
+Usage: kubectl shell [options]
 
-function help() {
+options:
+--namespace || -n <nsName>                  namespace (optional)
+--container-name || -c <containerName>      container name (must)
+--no-check <yourShellName>                  do not check if container has sh or bash
 
-cat << EOF
-usage: kubectl shell  [pod-name]/[container-name] [namespace] [optional]
-eg kubectl shell hello-world 
-or 
-kubectl shell hello-world default 
+Notes:
+If You don't specify a namespace it will be default namespace of Your current context.
+
+Examples:
+kubectl shell -n mynamespace -c mysql
+kubectl shell --namespace mynamespace --container-name mysql --no-check bash
 EOF
-exit 1 
+  exit 1 
 }
 
-if [[ $# -lt 1 ]]
-  then
-  help
+
+# check if it has enough 
+if (( ${#} < 1 )); then
+  hlp
 fi
 
-if [[ $# -gt 2 ]]
-  then
-  help
-fi
-
-function podshell() {
-    
-namespacename=$2
-if [[ -z "$2" ]]
-  then
-  namespacename=default 
-fi 
-
-kubectl exec -n $namespacename -ti  $1  -- sh
-exit 0 
-}
-
-function containershell() {
-
-namespacename=$3
-if [[ -z "$3" ]]
-  then
-  namespacename=default 
-fi 
-
-kubectl exec -n $namespacename -ti $1 -c $2 -- sh 
-exit 0 
-}
-
-function getcontainers() {
-
-CONTAINERS=$(kubectl get pods -ojsonpath="{.items[?(@.metadata.name=='$1')].spec.containers..name}")
-
-IFS=' ' read -r -a array <<< $CONTAINERS
-
-for element in "${array[@]}"
-do
-  if [[ "${element}" = "$2" ]]
-    then 
-    containershell $1 $element $3
-  fi 
+# parse options
+while (( ${#} != 0 )); do
+  set +e
+  set +u
+  case ${1} in
+    --no-check)
+      if [[ ! -z "${2}"  && "${2}" =~ ^[^-] ]]; then
+        noCheck=1
+        containerShell="${2}"
+      else
+        err "${2:-empty value} is not a valid for option ${1}"
+        exit 1
+      fi
+      ;;
+    -n|--namespace)
+      if [[ ! -z "${2}"  && "${2}" =~ ^[^-] ]]; then
+        namespace="${2}"
+      else
+        err "${2:-empty value} is not a valid for option ${1}"
+        exit 1
+      fi
+      ;;
+    -c|--container-name)
+      if [[ ! -z "${2}"  && "${2}" =~ ^[^-] ]]; then
+        containerName="${2}"
+      else
+        err "${2:-empty value} is not a valid for option ${1}"
+        exit 1
+      fi
+      ;;
+    *)
+      err "${1} is not a valid option"
+      exit 1
+      ;;
+  esac
+  shift 2
 done
-
+[[ -z "${containerName}" ]] && hlp
+if [[ -z "${noCheck}" ]]; then
+  noCheck=0
+fi
+if [[ -z "${namespace}" ]]; then
+  namespace=`kubectl config get-contexts --no-headers | rev | awk '{print $1}' | rev`
+fi
+set -e
+set -u
+# check if pod has sh/bash
+checkShell(){
+  set +e
+  set +u
+  local tempLogFile="/tmp/`echo ${RANDOM}-TEMPlog`"
+  containerShell="sh"
+  kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}" -c 'set -v' &> "${tempLogFile}"
+  if (( ${?} != 0 )); then
+    cat "${tempLogFile}" | grep -qP '\Wsh\W'
+    if (( ${?} == 0 )); then
+      containerShell="bash"
+      kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}" -c 'set -v' &> "${tempLogFile}"
+      if (( ${?} != 0 )); then
+        cat "${tempLogFile}" | grep -qP '\Wbash\W'
+        if (( ${?} == 0)); then
+          err "Seems Your container does not have bash or sh. If You are sure It has use --no-check"
+          exit 1
+        fi
+      fi
+    fi
+  fi
 }
 
-if [[ $# -eq 2 ]]
-  then
-  OUT=$(kubectl get pods -n $2 -ojsonpath="{.items..metadata.name}")
+if (( ${noCheck} == 1 )); then 
+  kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}"
 else
-  OUT=$(kubectl get pods -ojsonpath="{.items..metadata.name}")
+  checkShell
+  if (( ${?} == 0 )); then
+    kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}"
+  fi
 fi
-
-IFS=' ' read -r -a array <<< $OUT
-
-for element in "${array[@]}"
-do
-  if [[ "$element" = "$1" ]]
-    then 
-    podshell $element $2
-  fi 
-done
-
-for element in "${array[@]}"
-do
-  getcontainers $element $1 $2
-done
- 
