@@ -14,11 +14,11 @@ checkDeps(){
   dependencies=( kubectl rev awk )
   for cm in ${dependencies[@]}; do
     command -v ${cm} &> /dev/null
-    if (( ${?} != 0 )); then
+    if [[ ${?} -ne 0 ]]; then
       missingDep+="${cm} "
     fi
   done
-  if (( ${#missingDep} != 0 )); then
+  if [[ ${#missingDep} -ne 0 ]]; then
     for cm in ${missingDep[@]}; do
       err "You don't have ${cm} on Your machine."
     done
@@ -47,12 +47,12 @@ EOF
 
 
 # check if it has enough 
-if (( ${#} < 1 )); then
+if [[ ${#} -lt 1 ]]; then
   hlp
 fi
 
 # parse options
-while (( ${#} != 0 )); do
+while [[ ${#} -ne 0 ]]; do
   set +e
   set +u
   case ${1} in
@@ -93,7 +93,7 @@ if [[ -z "${noCheck}" ]]; then
   noCheck=0
 fi
 if [[ -z "${namespace}" ]]; then
-  namespace=`kubectl config get-contexts --no-headers | rev | awk '{print $1}' | rev`
+  namespace=$(kubectl config get-contexts --no-headers | rev | awk '{print $1}' | rev)
 fi
 set -e
 set -u
@@ -101,17 +101,17 @@ set -u
 checkShell(){
   set +e
   set +u
-  local tempLogFile="/tmp/`echo ${RANDOM}-TEMPlog`"
+  local tempLogFile="/tmp/$(echo ${RANDOM}-TEMPlog)"
   containerShell="sh"
   kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}" -c 'set -v' &> "${tempLogFile}"
-  if (( ${?} != 0 )); then
+  if [[ ${?} -ne  0 ]]; then
     cat "${tempLogFile}" | grep -qP '\Wsh\W'
-    if (( ${?} == 0 )); then
+    if [[ ${?} -eq 0 ]]; then
       containerShell="bash"
       kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}" -c 'set -v' &> "${tempLogFile}"
-      if (( ${?} != 0 )); then
+      if [[ ${?} -ne 0 ]]; then
         cat "${tempLogFile}" | grep -qP '\Wbash\W'
-        if (( ${?} == 0)); then
+        if [[ ${?} -eq 0 ]]; then
           err "Seems Your container does not have bash or sh. If You are sure It has use --no-check"
           exit 1
         fi
@@ -120,11 +120,11 @@ checkShell(){
   fi
 }
 
-if (( ${noCheck} == 1 )); then 
+if [[ ${noCheck} -eq 1 ]]; then 
   kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}"
 else
   checkShell
-  if (( ${?} == 0 )); then
+  if [[ ${?} -eq 0 ]]; then
     kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}"
   fi
 fi
