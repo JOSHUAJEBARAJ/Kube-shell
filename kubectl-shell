@@ -105,12 +105,12 @@ checkShell(){
   containerShell="sh"
   kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}" -c 'set -v' &> "${tempLogFile}"
   if [[ ${?} -ne  0 ]]; then
-    cat "${tempLogFile}" | grep -qP '\Wsh\W'
+    grep -qP "${tempLogFile}"
     if [[ ${?} -eq 0 ]]; then
       containerShell="bash"
       kubectl exec --namespace "${namespace}" -it "${containerName}" -- "${containerShell}" -c 'set -v' &> "${tempLogFile}"
       if [[ ${?} -ne 0 ]]; then
-        cat "${tempLogFile}" | grep -qP '\Wbash\W'
+        grep -qP "${tempLogFile}"
         if [[ ${?} -eq 0 ]]; then
           err "Seems Your container does not have bash or sh. If You are sure It has use --no-check"
           exit 1
